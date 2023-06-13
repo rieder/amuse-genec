@@ -6,6 +6,7 @@ Will create a separate GENEC instance for each star so don't overdo it!
 from amuse.datamodel import Particles
 from amuse.community.genec import Genec
 from amuse.units import units
+from amuse.rfi.async_request import AsyncRequestsPool
 
 
 class GenecParticles:
@@ -21,6 +22,8 @@ class GenecParticles:
         self.particles.add_particle(
             self.instances[-1].particles.add_particle(particle)
         )
+        self.instances[-1].evolve_one_step(0)
+        # self.instances[-1].commit_particles()
         return self.particles[-1]
 
     def add_particles(self, particles):
@@ -45,13 +48,20 @@ class GenecMultiple(Genec):
 
     def evolve_model(self, time):
         while self.model_time < time:
-            time_step = self.particles.time_step.min() 
+            time_step = self.particles.particles.time_step.min()
             for instance in self.instances:
                 instance.particles.time_step = time_step
+                instance.recommit_particles()
+            pool = AsyncRequestsPool()
+            for instance in self.instances:
                 if instance.particles.age.max() < time:
-                    instance.evolve_one_step(0)
-                    channel = instance.particles.new_channel_to(self.particles.particles)
-                    channel.copy()
+                    pool.join(
+                        instance.evolve_one_step(0, return_request=True)
+                    )
+            pool.waitall()
+            for instance in self.instances:
+                channel = instance.particles.new_channel_to(self.particles.particles)
+                channel.copy()
                 if instance.particles.age.max() > self.model_time:
                     self.model_time = instance.particles.age.max()
 
