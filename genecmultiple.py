@@ -10,12 +10,16 @@ from amuse.rfi.async_request import AsyncRequestsPool
 
 
 class GenecParticles:
-    def __init__(self, **kwargs):
+    def __init__(self, max_number_of_workers=4, **kwargs):
         self.instances = []
         self.particles = Particles()
         self.kwargs = kwargs
+        self.max_number_of_workers = max_number_of_workers
 
     def add_particle(self, particle):
+        if len(self.instances >= self.max_number_of_workers):
+            print("Max number of workers would be exceeded, not adding particle")
+            return
         self.instances.append(
             Genec(**self.kwargs)
         )
@@ -40,11 +44,15 @@ class GenecParticles:
 
 
 class GenecMultiple(Genec):
-    def __init__(self, **kwargs):
+    def __init__(self, max_number_of_workers=4, **kwargs):
         self.kwargs = kwargs
-        self.particles = GenecParticles(**self.kwargs)
+        self.particles = GenecParticles(
+            max_number_of_workers=max_number_of_workers,
+            **self.kwargs
+        )
         self.instances = self.particles.instances
         self.model_time = 0 | units.Myr
+        self.max_number_of_workers = max_number_of_workers
 
     def evolve_model(self, time):
         while self.model_time < time:
