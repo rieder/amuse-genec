@@ -55,8 +55,12 @@ class GenecMultiple(Genec):
         self.max_number_of_workers = max_number_of_workers
 
     def evolve_model(self, time):
-        while self.model_time < time:
+        while (time - self.model_time) > (0 | units.yr):
             time_step = self.particles.particles.time_step.min()
+            time_step = min(
+                time_step,
+                time - self.model_time
+            )
             for instance in self.instances:
                 instance.particles.time_step = time_step
                 instance.recommit_particles()
