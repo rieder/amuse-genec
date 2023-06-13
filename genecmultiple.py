@@ -17,7 +17,7 @@ class GenecParticles:
         self.max_number_of_workers = max_number_of_workers
 
     def add_particle(self, particle):
-        if len(self.instances >= self.max_number_of_workers):
+        if len(self.instances) >= self.max_number_of_workers:
             print("Max number of workers would be exceeded, not adding particle")
             return
         self.instances.append(
