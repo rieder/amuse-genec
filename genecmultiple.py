@@ -26,8 +26,6 @@ class GenecParticles:
         self.particles.add_particle(
             self.instances[-1].particles.add_particle(particle)
         )
-        self.instances[-1].evolve_one_step(0)
-        # self.instances[-1].commit_particles()
         return self.particles[-1]
 
     def add_particles(self, particles):
@@ -58,7 +56,9 @@ class GenecMultiple(Genec):
         self.max_number_of_workers = max_number_of_workers
 
     def evolve_model(self, time):
-        while (time - self.model_time) > (0 | units.yr):
+        tolerance = 1 | units.s
+        while (time - self.model_time) > tolerance:
+            print('.', end='', flush=True)
             time_step = self.particles.particles.time_step.min()
             time_step = min(
                 time_step,
@@ -67,26 +67,28 @@ class GenecMultiple(Genec):
             if self.parameters['equal_timesteps']:
                 for instance in self.instances:
                     instance.particles.time_step = time_step
-                    instance.recommit_particles()
             pool = AsyncRequestsPool()
             for i, instance in enumerate(self.instances):
-                age = instance.particles.age.in_(units.julianyr)
-                if instance.particles.age.max() < time:
-                    time_step = instance.particles.time_step.max().in_(units.julianyr)
-                    new_time_step = min(
-                        time_step,
-                        time - instance.particles.age
-                    ).in_(units.julianyr)
-                    instance.particles.time_step = new_time_step
-                    instance.recommit_particles()
+                age = instance.particles[0].age.in_(units.julianyr)
+                time_step = instance.particles[0].time_step.in_(units.julianyr)
+                if (time - age) > tolerance:
+                    if (age + time_step) > time:
+                        new_time_step = (time - age).in_(units.julianyr)
+                        instance.particles.time_step = new_time_step
+                        print(f"instance {i} setting new time step to {new_time_step}")
+                    print(f"{instance.state_machine.get_name_of_current_state()}")
+                    
+                    print(f"{i}: {time-age} to go, step is {time_step}")
                     pool.join(
                         instance.evolve_one_step(0, return_request=True)
                     )
             pool.waitall()
+            self.model_time = 1e99 | units.julianyr
             for instance in self.instances:
                 channel = instance.particles.new_channel_to(self.particles.particles)
                 channel.copy()
-                self.model_time = instance.particles.age.min()
+                self.model_time = min(instance.particles.age.min(), self.model_time)
+        print(f"\nevolved to {self.model_time.in_(units.julianyr)}")
 
     def evolve_for(self, time):
         for instance in self.instances:
