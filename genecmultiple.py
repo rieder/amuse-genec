@@ -50,6 +50,9 @@ class GenecMultiple(Genec):
             max_number_of_workers=max_number_of_workers,
             **self.kwargs
         )
+        self.parameters = {
+            "equal_timesteps": True,
+        }
         self.instances = self.particles.instances
         self.model_time = 0 | units.Myr
         self.max_number_of_workers = max_number_of_workers
@@ -61,12 +64,21 @@ class GenecMultiple(Genec):
                 time_step,
                 time - self.model_time
             )
-            for instance in self.instances:
-                instance.particles.time_step = time_step
-                instance.recommit_particles()
+            if self.parameters['equal_timesteps']:
+                for instance in self.instances:
+                    instance.particles.time_step = time_step
+                    instance.recommit_particles()
             pool = AsyncRequestsPool()
-            for instance in self.instances:
+            for i, instance in enumerate(self.instances):
+                age = instance.particles.age.in_(units.julianyr)
                 if instance.particles.age.max() < time:
+                    time_step = instance.particles.time_step.max().in_(units.julianyr)
+                    new_time_step = min(
+                        time_step,
+                        time - instance.particles.age
+                    ).in_(units.julianyr)
+                    instance.particles.time_step = new_time_step
+                    instance.recommit_particles()
                     pool.join(
                         instance.evolve_one_step(0, return_request=True)
                     )
@@ -74,8 +86,7 @@ class GenecMultiple(Genec):
             for instance in self.instances:
                 channel = instance.particles.new_channel_to(self.particles.particles)
                 channel.copy()
-                if instance.particles.age.max() > self.model_time:
-                    self.model_time = instance.particles.age.max()
+                self.model_time = instance.particles.age.min()
 
     def evolve_for(self, time):
         for instance in self.instances:
